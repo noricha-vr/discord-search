@@ -21,3 +21,4 @@
 
 - [tech/stack.md](./tech/stack.md) - 技術選定・アーキテクチャ
 - [tech/data-model.md](./tech/data-model.md) - データモデル設計
+- [tech/directory-structure.md](./tech/directory-structure.md) - ディレクトリ構造
