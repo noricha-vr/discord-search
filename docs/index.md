@@ -20,8 +20,4 @@
 ## 技術
 
 - [tech/stack.md](./tech/stack.md) - 技術選定・アーキテクチャ
-
-## 未作成
-
-- tech/data-model.md - データモデル設計
-- tech/architecture.md - 詳細アーキテクチャ（必要に応じて）
+- [tech/data-model.md](./tech/data-model.md) - データモデル設計
