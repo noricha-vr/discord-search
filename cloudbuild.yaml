@@ -1,0 +1,55 @@
+steps:
+  # Bot イメージをビルド
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/discord-search/bot:$COMMIT_SHA'
+      - '-t'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/discord-search/bot:latest'
+      - '-f'
+      - 'docker/bot.Dockerfile'
+      - '.'
+
+  # Jobs イメージをビルド
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/discord-search/jobs:$COMMIT_SHA'
+      - '-t'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/discord-search/jobs:latest'
+      - '-f'
+      - 'docker/jobs.Dockerfile'
+      - '.'
+
+  # イメージをプッシュ
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/discord-search/bot']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/discord-search/jobs']
+
+  # Cloud Run Bot をデプロイ
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'discord-search-bot'
+      - '--image'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/discord-search/bot:$COMMIT_SHA'
+      - '--region'
+      - 'asia-northeast1'
+      - '--platform'
+      - 'managed'
+      - '--no-allow-unauthenticated'
+
+images:
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/discord-search/bot:$COMMIT_SHA'
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/discord-search/bot:latest'
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/discord-search/jobs:$COMMIT_SHA'
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/discord-search/jobs:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
