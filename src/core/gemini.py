@@ -5,7 +5,7 @@ from google import genai
 from google.genai import types
 
 from src.core.config import settings
-from src.core.models import Message
+from src.core.models import ConversationChunk, Message
 
 logger = logging.getLogger(__name__)
 
@@ -42,31 +42,135 @@ class GeminiClient:
 
     async def index_message(self, message: Message) -> str | None:
         """メッセージをFile Search Storeにインデックス"""
+        import tempfile
+        import os
+        import time
+
         try:
             store_name = await self.ensure_store()
             content = message.to_file_content()
 
-            # ファイルとしてアップロード
-            operation = self.client.file_search_stores.upload_to_file_search_store(
-                file=content.encode("utf-8"),
-                file_search_store_name=store_name,
-                config={
-                    "display_name": f"msg_{message.message_id}",
-                }
-            )
+            # 一時ファイルに書き込み
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".txt",
+                encoding="utf-8",
+                delete=False,
+            ) as tmp_file:
+                tmp_file.write(content)
+                tmp_path = tmp_file.name
 
-            # 完了を待機
-            while not operation.done:
-                import time
-                time.sleep(1)
-                operation = self.client.operations.get(operation)
+            try:
+                # ファイルとしてアップロード
+                operation = self.client.file_search_stores.upload_to_file_search_store(
+                    file=tmp_path,
+                    file_search_store_name=store_name,
+                    config={
+                        "display_name": f"msg_{message.message_id}",
+                    }
+                )
 
-            logger.debug(f"メッセージをインデックス: {message.message_id}")
-            return f"msg_{message.message_id}"
+                # 完了を待機
+                while not operation.done:
+                    time.sleep(1)
+                    operation = self.client.operations.get(operation)
+
+                logger.debug(f"メッセージをインデックス: {message.message_id}")
+                return f"msg_{message.message_id}"
+            finally:
+                # 一時ファイルを削除
+                os.unlink(tmp_path)
 
         except Exception as e:
             logger.error(f"インデックス失敗: {message.message_id} - {e}")
             return None
+
+    async def index_conversation_chunk(
+        self,
+        chunk: ConversationChunk,
+        messages: list[Message],
+    ) -> str | None:
+        """会話チャンクをFile Search Storeにインデックス
+
+        Args:
+            chunk: インデックスする会話チャンク
+            messages: チャンク内のメッセージ一覧（時間順）
+        """
+        import tempfile
+        import os
+        import time
+
+        try:
+            store_name = await self.ensure_store()
+            content = chunk.to_file_content(messages)
+
+            # 一時ファイルに書き込み
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".txt",
+                encoding="utf-8",
+                delete=False,
+            ) as tmp_file:
+                tmp_file.write(content)
+                tmp_path = tmp_file.name
+
+            try:
+                # ファイルとしてアップロード
+                operation = self.client.file_search_stores.upload_to_file_search_store(
+                    file=tmp_path,
+                    file_search_store_name=store_name,
+                    config={
+                        "display_name": f"chunk_{chunk.chunk_id}",
+                    }
+                )
+
+                # 完了を待機
+                while not operation.done:
+                    time.sleep(1)
+                    operation = self.client.operations.get(operation)
+
+                logger.debug(f"チャンクをインデックス: {chunk.chunk_id}")
+                return f"chunk_{chunk.chunk_id}"
+            finally:
+                # 一時ファイルを削除
+                os.unlink(tmp_path)
+
+        except Exception as e:
+            logger.error(f"チャンクインデックス失敗: {chunk.chunk_id} - {e}")
+            return None
+
+    async def delete_all_files_in_store(self) -> int:
+        """File Search Store内の全ファイルを削除（再インデックス用）
+
+        Returns:
+            削除したファイル数
+        """
+        try:
+            store_name = await self.ensure_store()
+            deleted_count = 0
+
+            # ストア内のファイル一覧を取得して削除
+            files = self.client.file_search_stores.list_files(
+                file_search_store_name=store_name
+            )
+
+            for file in files:
+                try:
+                    self.client.file_search_stores.delete_file(
+                        file_search_store_name=store_name,
+                        file_name=file.name,
+                    )
+                    deleted_count += 1
+                    logger.debug(f"ファイル削除: {file.name}")
+                except Exception as e:
+                    logger.warning(f"ファイル削除失敗: {file.name} - {e}")
+
+            logger.info(f"File Search Store内の{deleted_count}件のファイルを削除")
+            return deleted_count
+
+        except Exception as e:
+            logger.error(f"ファイル削除処理失敗: {e}")
+            return 0
 
     async def search(self, query: str) -> list[dict]:
         """自然言語で検索"""
@@ -146,26 +250,72 @@ class GeminiClient:
 あなたはDiscordメッセージ検索アシスタントです。
 ユーザーのクエリに基づいて、関連するメッセージを検索し、結果を返してください。
 
-検索結果には必ず以下を含めてください:
-1. 各メッセージのメッセージID（msg_xxxxxxxxx形式）
-2. メッセージの簡潔な要約
+## ユーザーエイリアス
+以下のニックネームは同一人物を指します:
+- みーちゃん = @Usagi
 
-メッセージIDは正確に抽出し、msg_プレフィックスを付けてください。
+## 出力形式
+検索結果は必ず以下のJSON形式で返してください。JSONのみを出力し、他のテキストは含めないでください:
+
+```json
+{
+  "results": [
+    {
+      "message_id": "msg_xxxxxxxxx",
+      "reason": "このメッセージがクエリに関連する理由（1-2文で簡潔に）",
+      "highlight": "クエリに関連する部分の引用（元のメッセージから20-50文字程度）"
+    }
+  ]
+}
+```
+
+## 重要なルール
+1. message_idは必ず "msg_" プレフィックス付きの正確なIDを使用
+2. reasonはなぜこのメッセージがクエリにマッチしたか説明
+3. highlightはメッセージ本文からクエリに関連する部分を引用（添付ファイルのみの場合は「添付ファイル: ファイル名」）
+4. 最大5件まで、関連度の高い順に返す
 """,
                 )
             )
 
-            # レスポンスからメッセージIDを抽出
+            # レスポンスからJSONをパース
             results = []
             response_text = response.text or ""
+
             if response_text:
                 import re
-                message_ids = re.findall(r"msg_(\d+)", response_text)
-                for msg_id in message_ids[:settings.search_result_limit]:
-                    results.append({
-                        "message_id": msg_id,
-                        "response_text": response_text,
-                    })
+                import json
+
+                # JSONブロックを抽出
+                json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(1)
+                else:
+                    # ```なしの場合、全体をJSONとしてパース試行
+                    json_str = response_text.strip()
+
+                try:
+                    data = json.loads(json_str)
+                    for item in data.get("results", [])[:settings.search_result_limit]:
+                        msg_id = item.get("message_id", "")
+                        # msg_プレフィックスを除去
+                        if msg_id.startswith("msg_"):
+                            msg_id = msg_id[4:]
+                        results.append({
+                            "message_id": msg_id,
+                            "reason": item.get("reason", ""),
+                            "highlight": item.get("highlight", ""),
+                        })
+                except json.JSONDecodeError:
+                    # JSONパース失敗時は従来方式にフォールバック
+                    logger.warning(f"JSONパース失敗、従来方式にフォールバック: {response_text[:200]}")
+                    message_ids = re.findall(r"msg_(\d+)", response_text)
+                    for msg_id in message_ids[:settings.search_result_limit]:
+                        results.append({
+                            "message_id": msg_id,
+                            "reason": "",
+                            "highlight": "",
+                        })
 
             return results, response_text
 

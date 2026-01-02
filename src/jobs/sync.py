@@ -58,8 +58,9 @@ class MessageSyncer:
                 # チャンネル間で待機（レート制限対策）
                 await asyncio.sleep(settings.sync_delay_seconds * 5)
 
-            # フォーラムチャンネルのスレッドも同期
-            for channel in guild.forum_channels:
+            # フォーラムチャンネルのスレッドも同期（存在する場合）
+            forum_channels = getattr(guild, "forum_channels", [])
+            for channel in forum_channels:
                 try:
                     async for thread in channel.archived_threads():
                         await self._sync_channel(thread, last_sync, sync_id)

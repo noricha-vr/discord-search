@@ -4,7 +4,7 @@ from datetime import datetime
 from google.cloud import firestore
 
 from src.core.config import settings
-from src.core.models import Message, SyncStatus, Attachment
+from src.core.models import ConversationChunk, Message, SyncStatus, Attachment
 
 
 class FirestoreClient:
@@ -13,6 +13,7 @@ class FirestoreClient:
     def __init__(self):
         self.db = firestore.Client(project=settings.gcp_project_id)
         self.messages_ref = self.db.collection("messages")
+        self.chunks_ref = self.db.collection("conversation_chunks")
         self.sync_status_ref = self.db.collection("sync_status")
         self.config_ref = self.db.collection("config")
 
@@ -43,6 +44,61 @@ class FirestoreClient:
         """メッセージが存在するか確認"""
         doc = self.messages_ref.document(message_id).get()
         return doc.exists
+
+    async def get_all_messages(self) -> list[Message]:
+        """全メッセージを取得（再インデックス用）"""
+        messages = []
+        docs = self.messages_ref.stream()
+        for doc in docs:
+            messages.append(Message(**doc.to_dict()))
+        return messages
+
+    # --- Conversation Chunks ---
+
+    async def save_chunk(self, chunk: ConversationChunk) -> None:
+        """会話チャンクを保存"""
+        doc_ref = self.chunks_ref.document(chunk.chunk_id)
+        doc_ref.set(chunk.model_dump(mode="json"))
+
+    async def get_chunk(self, chunk_id: str) -> ConversationChunk | None:
+        """会話チャンクを取得"""
+        doc = self.chunks_ref.document(chunk_id).get()
+        if doc.exists:
+            return ConversationChunk(**doc.to_dict())
+        return None
+
+    async def get_chunk_by_message_id(self, message_id: str) -> ConversationChunk | None:
+        """メッセージIDから所属チャンクを取得"""
+        docs = (
+            self.chunks_ref
+            .where("message_ids", "array_contains", message_id)
+            .limit(1)
+            .stream()
+        )
+        for doc in docs:
+            return ConversationChunk(**doc.to_dict())
+        return None
+
+    async def get_all_chunks(self) -> list[ConversationChunk]:
+        """全チャンクを取得"""
+        chunks = []
+        docs = self.chunks_ref.stream()
+        for doc in docs:
+            chunks.append(ConversationChunk(**doc.to_dict()))
+        return chunks
+
+    async def delete_all_chunks(self) -> int:
+        """全チャンクを削除（再インデックス用）
+
+        Returns:
+            削除したチャンク数
+        """
+        deleted_count = 0
+        docs = self.chunks_ref.stream()
+        for doc in docs:
+            doc.reference.delete()
+            deleted_count += 1
+        return deleted_count
 
     # --- Sync Status ---
 

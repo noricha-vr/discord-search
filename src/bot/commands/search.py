@@ -41,11 +41,17 @@ class SearchCog(commands.Cog):
             message_ids = [r["message_id"] for r in results]
             messages = await firestore_client.get_messages_by_ids(message_ids)
 
-            # SearchResult形式に変換
-            search_results = [
-                SearchResult(message=msg, snippet=msg.content[:100])
-                for msg in messages
-            ]
+            # SearchResult形式に変換（Geminiからの理由とハイライトを含む）
+            # message_idをキーにしてresultsからreasonとhighlightを取得
+            result_map = {r["message_id"]: r for r in results}
+            search_results = []
+            for msg in messages:
+                r = result_map.get(msg.message_id, {})
+                search_results.append(SearchResult(
+                    message=msg,
+                    snippet=r.get("highlight", msg.content[:100] if msg.content else ""),
+                    reason=r.get("reason", ""),
+                ))
 
             # 検索コンテキストを保存（絞り込み用）
             self.search_context[interaction.user.id] = message_ids
@@ -98,10 +104,16 @@ class SearchCog(commands.Cog):
                 message_ids = [r["message_id"] for r in results]
                 messages = await firestore_client.get_messages_by_ids(message_ids)
 
-                search_results = [
-                    SearchResult(message=msg, snippet=msg.content[:100])
-                    for msg in messages
-                ]
+                # SearchResult形式に変換（Geminiからの理由とハイライトを含む）
+                result_map = {r["message_id"]: r for r in results}
+                search_results = []
+                for msg in messages:
+                    r = result_map.get(msg.message_id, {})
+                    search_results.append(SearchResult(
+                        message=msg,
+                        snippet=r.get("highlight", msg.content[:100] if msg.content else ""),
+                        reason=r.get("reason", ""),
+                    ))
 
                 # コンテキスト更新
                 self.search_context[user_id] = message_ids

@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     search_result_limit: int = 5
 
     class Config:
-        env_file = ".env"
+        env_file = ".env.local", ".env"
         env_file_encoding = "utf-8"
 
 
