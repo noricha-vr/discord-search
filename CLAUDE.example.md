@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | 項目 | 値 |
 |------|-----|
-| GCP Project ID | `discord-search-20260101` |
+| GCP Project ID | `your-gcp-project-id` |
 | GCP Region | `asia-northeast1` |
 | Python | 3.12+ |
 | パッケージ管理 | uv |
@@ -85,6 +85,7 @@ src/
 - `DISCORD_BOT_TOKEN`
 - `DISCORD_GUILD_ID`
 - `GEMINI_API_KEY`
+- `GCP_PROJECT_ID`
 
 ## スクリプト
 

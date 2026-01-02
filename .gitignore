@@ -24,3 +24,7 @@ logs/
 # Build
 dist/
 build/
+
+# Project-specific configs (contain personal info)
+config/aliases.json
+CLAUDE.md

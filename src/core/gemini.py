@@ -1,6 +1,9 @@
 """Gemini File Search クライアント"""
 
+import json
 import logging
+from pathlib import Path
+
 from google import genai
 from google.genai import types
 
@@ -8,6 +11,22 @@ from src.core.config import settings
 from src.core.models import ConversationChunk, Message
 
 logger = logging.getLogger(__name__)
+
+
+def load_user_aliases() -> dict[str, str]:
+    """config/aliases.json からユーザーエイリアスを読み込む"""
+    aliases_path = Path(__file__).parent.parent.parent / "config" / "aliases.json"
+    if not aliases_path.exists():
+        logger.debug("aliases.json が見つかりません。エイリアスなしで動作します。")
+        return {}
+
+    try:
+        with open(aliases_path, encoding="utf-8") as f:
+            data = json.load(f)
+            return data.get("aliases", {})
+    except Exception as e:
+        logger.warning(f"aliases.json の読み込みに失敗: {e}")
+        return {}
 
 
 class GeminiClient:
@@ -246,35 +265,7 @@ class GeminiClient:
                             )
                         )
                     ],
-                    system_instruction="""
-あなたはDiscordメッセージ検索アシスタントです。
-ユーザーのクエリに基づいて、関連するメッセージを検索し、結果を返してください。
-
-## ユーザーエイリアス
-以下のニックネームは同一人物を指します:
-- みーちゃん = @Usagi
-
-## 出力形式
-検索結果は必ず以下のJSON形式で返してください。JSONのみを出力し、他のテキストは含めないでください:
-
-```json
-{
-  "results": [
-    {
-      "message_id": "msg_xxxxxxxxx",
-      "reason": "このメッセージがクエリに関連する理由（1-2文で簡潔に）",
-      "highlight": "クエリに関連する部分の引用（元のメッセージから20-50文字程度）"
-    }
-  ]
-}
-```
-
-## 重要なルール
-1. message_idは必ず "msg_" プレフィックス付きの正確なIDを使用
-2. reasonはなぜこのメッセージがクエリにマッチしたか説明
-3. highlightはメッセージ本文からクエリに関連する部分を引用（添付ファイルのみの場合は「添付ファイル: ファイル名」）
-4. 最大5件まで、関連度の高い順に返す
-""",
+                    system_instruction=self._build_search_system_instruction(),
                 )
             )
 
@@ -284,7 +275,6 @@ class GeminiClient:
 
             if response_text:
                 import re
-                import json
 
                 # JSONブロックを抽出
                 json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
@@ -322,6 +312,44 @@ class GeminiClient:
         except Exception as e:
             logger.error(f"検索失敗: {query} - {e}")
             return [], str(e)
+
+    def _build_search_system_instruction(self) -> str:
+        """検索用のシステムインストラクションを構築"""
+        aliases = load_user_aliases()
+
+        # エイリアスセクションを構築
+        if aliases:
+            alias_lines = [f"- {nickname} = @{username}" for nickname, username in aliases.items()]
+            alias_section = "## ユーザーエイリアス\n以下のニックネームは同一人物を指します:\n" + "\n".join(alias_lines)
+        else:
+            alias_section = ""
+
+        return f"""あなたはDiscordメッセージ検索アシスタントです。
+ユーザーのクエリに基づいて、関連するメッセージを検索し、結果を返してください。
+
+{alias_section}
+
+## 出力形式
+検索結果は必ず以下のJSON形式で返してください。JSONのみを出力し、他のテキストは含めないでください:
+
+```json
+{
+  "results": [
+    {
+      "message_id": "msg_xxxxxxxxx",
+      "reason": "このメッセージがクエリに関連する理由（1-2文で簡潔に）",
+      "highlight": "クエリに関連する部分の引用（元のメッセージから20-50文字程度）"
+    }
+  ]
+}
+```
+
+## 重要なルール
+1. message_idは必ず "msg_" プレフィックス付きの正確なIDを使用
+2. reasonはなぜこのメッセージがクエリにマッチしたか説明
+3. highlightはメッセージ本文からクエリに関連する部分を引用（添付ファイルのみの場合は「添付ファイル: ファイル名」）
+4. 最大5件まで、関連度の高い順に返す
+"""
 
 
 # シングルトンインスタンス

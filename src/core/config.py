@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
 
     # GCP
-    gcp_project_id: str = "discord-search-20260101"
+    gcp_project_id: str  # 環境変数必須
     gcp_region: str = "asia-northeast1"
 
     # File Search
