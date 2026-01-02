@@ -9,12 +9,25 @@ services:
       - ~/.config/gcloud:/root/.config/gcloud:ro
     restart: unless-stopped
 
+  cron:
+    build:
+      context: .
+      dockerfile: docker/cron.Dockerfile
+    env_file:
+      - .env
+    volumes:
+      - ~/.config/gcloud:/root/.config/gcloud:ro
+      - sync-logs:/var/log
+    restart: unless-stopped
+
   sync-job:
     build:
       context: .
       dockerfile: docker/jobs.Dockerfile
     env_file:
       - .env
+    volumes:
+      - ~/.config/gcloud:/root/.config/gcloud:ro
     profiles:
       - jobs
     command: ["python", "-m", "src.jobs.main"]
@@ -25,6 +38,11 @@ services:
       dockerfile: docker/jobs.Dockerfile
     env_file:
       - .env
+    volumes:
+      - ~/.config/gcloud:/root/.config/gcloud:ro
     profiles:
       - jobs
     command: ["python", "-m", "src.jobs.main", "--full"]
+
+volumes:
+  sync-logs:
