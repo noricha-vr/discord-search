@@ -5,6 +5,8 @@ services:
       dockerfile: docker/bot.Dockerfile
     env_file:
       - .env
+    volumes:
+      - ~/.config/gcloud:/root/.config/gcloud:ro
     restart: unless-stopped
 
   sync-job:

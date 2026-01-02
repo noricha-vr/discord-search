@@ -16,6 +16,7 @@ class FirestoreClient:
         self.chunks_ref = self.db.collection("conversation_chunks")
         self.sync_status_ref = self.db.collection("sync_status")
         self.config_ref = self.db.collection("config")
+        self.channels_ref = self.db.collection("synced_channels")
 
     # --- Messages ---
 
@@ -182,6 +183,62 @@ class FirestoreClient:
             "last_sync_at": sync_time.isoformat(),
             "initial_sync_completed": True,
         }, merge=True)
+
+    # --- Synced Channels ---
+
+    async def get_synced_channel_ids(self) -> set[str]:
+        """同期済みチャンネルIDの一覧を取得"""
+        channel_ids = set()
+        docs = self.channels_ref.stream()
+        for doc in docs:
+            channel_ids.add(doc.id)
+        return channel_ids
+
+    async def mark_channel_synced(
+        self,
+        channel_id: str,
+        channel_name: str,
+        first_synced_at: datetime | None = None,
+    ) -> None:
+        """チャンネルを同期済みとしてマーク"""
+        now = datetime.utcnow()
+        doc_ref = self.channels_ref.document(channel_id)
+        doc = doc_ref.get()
+
+        if doc.exists:
+            # 既存: last_synced_atのみ更新
+            doc_ref.update({
+                "channel_name": channel_name,
+                "last_synced_at": now.isoformat(),
+            })
+        else:
+            # 新規: 全フィールド設定
+            doc_ref.set({
+                "channel_id": channel_id,
+                "channel_name": channel_name,
+                "first_synced_at": (first_synced_at or now).isoformat(),
+                "last_synced_at": now.isoformat(),
+            })
+
+    async def get_synced_channels_info(self) -> list[dict]:
+        """同期済みチャンネルの詳細情報を取得"""
+        channels = []
+        docs = self.channels_ref.stream()
+        for doc in docs:
+            channels.append(doc.to_dict())
+        return channels
+
+    async def get_message_count_by_channel(self) -> dict[str, int]:
+        """チャンネルごとのメッセージ数を取得"""
+        from collections import defaultdict
+        counts = defaultdict(int)
+        docs = self.messages_ref.stream()
+        for doc in docs:
+            data = doc.to_dict()
+            channel_id = data.get("channel_id")
+            if channel_id:
+                counts[channel_id] += 1
+        return dict(counts)
 
 
 # シングルトンインスタンス

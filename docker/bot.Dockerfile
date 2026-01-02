@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir .
 
 # ソースコード
 COPY src/ ./src/
+COPY scripts/ ./scripts/
 
 # 環境変数
 ENV PYTHONUNBUFFERED=1

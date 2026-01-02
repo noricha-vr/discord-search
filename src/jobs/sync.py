@@ -24,6 +24,7 @@ class MessageSyncer:
         self.processed_count = 0
         self.error_count = 0
         self.new_count = 0
+        self.new_channels: list[str] = []  # 新規検出チャンネル名
 
     async def sync_guild(self, guild_id: int, full_sync: bool = False) -> dict:
         """ギルド全体を同期"""
@@ -45,10 +46,28 @@ class MessageSyncer:
             if not full_sync:
                 last_sync = await firestore_client.get_last_sync_time()
 
+            # 同期済みチャンネルIDを取得
+            synced_channel_ids = await firestore_client.get_synced_channel_ids()
+            logger.info(f"同期済みチャンネル数: {len(synced_channel_ids)}")
+
             # 全テキストチャンネルを同期
             for channel in guild.text_channels:
                 try:
-                    await self._sync_channel(channel, last_sync, sync_id)
+                    channel_id = str(channel.id)
+                    is_new_channel = channel_id not in synced_channel_ids
+
+                    if is_new_channel:
+                        # 新規チャンネル: フル同期
+                        logger.info(f"新規チャンネル検出: {channel.name}")
+                        self.new_channels.append(channel.name)
+                        await self._sync_channel(channel, None, sync_id)
+                    else:
+                        # 既存チャンネル: 差分同期
+                        await self._sync_channel(channel, last_sync, sync_id)
+
+                    # 同期済みとしてマーク
+                    await firestore_client.mark_channel_synced(channel_id, channel.name)
+
                 except discord.errors.Forbidden:
                     logger.warning(f"チャンネルアクセス拒否: {channel.name}")
                 except Exception as e:
@@ -63,7 +82,17 @@ class MessageSyncer:
             for channel in forum_channels:
                 try:
                     async for thread in channel.archived_threads():
-                        await self._sync_channel(thread, last_sync, sync_id)
+                        thread_id = str(thread.id)
+                        is_new_thread = thread_id not in synced_channel_ids
+
+                        if is_new_thread:
+                            logger.info(f"新規スレッド検出: {thread.name}")
+                            self.new_channels.append(f"{channel.name}/{thread.name}")
+                            await self._sync_channel(thread, None, sync_id)
+                        else:
+                            await self._sync_channel(thread, last_sync, sync_id)
+
+                        await firestore_client.mark_channel_synced(thread_id, thread.name)
                         await asyncio.sleep(settings.sync_delay_seconds * 2)
                 except discord.errors.Forbidden:
                     logger.warning(f"フォーラムアクセス拒否: {channel.name}")
@@ -73,6 +102,9 @@ class MessageSyncer:
             # 同期完了
             await firestore_client.complete_sync(sync_id, self.error_count)
             await firestore_client.update_last_sync_time(datetime.utcnow())
+
+            if self.new_channels:
+                logger.info(f"新規チャンネル/スレッド: {self.new_channels}")
 
             logger.info(
                 f"同期完了: processed={self.processed_count}, "
@@ -84,6 +116,7 @@ class MessageSyncer:
                 "processed_count": self.processed_count,
                 "new_count": self.new_count,
                 "error_count": self.error_count,
+                "new_channels": self.new_channels,
             }
 
         except Exception as e:
