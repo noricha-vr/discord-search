@@ -50,7 +50,7 @@
 > なぜなら、誰がいつ言ったかは覚えていることがあるから。
 
 ```
-/search 経費 from:@妻 period:今月
+/search 経費 from:@username period:今月
 ```
 
 ### 添付ファイル検索

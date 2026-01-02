@@ -3,8 +3,15 @@
 
 set -e
 
-PROJECT_ID="discord-search-20260101"
-REGION="asia-northeast1"
+# 環境変数から取得（必須）
+PROJECT_ID="${GCP_PROJECT_ID:-}"
+REGION="${GCP_REGION:-asia-northeast1}"
+
+if [ -z "$PROJECT_ID" ]; then
+    echo "Error: GCP_PROJECT_ID environment variable is required"
+    echo "Usage: GCP_PROJECT_ID=your-project-id ./scripts/setup_gcp.sh"
+    exit 1
+fi
 
 echo "=== GCP Setup for Discord Search ==="
 echo "Project: $PROJECT_ID"

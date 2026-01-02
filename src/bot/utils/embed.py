@@ -75,7 +75,7 @@ def create_search_result_embed(
     # 絞り込みヒント
     embed.set_footer(
         text="追加で条件を絞りますか？\n"
-             "例: 「この中で添付ファイルがあるもの」「妻の発言だけ」"
+             "例: 「この中で添付ファイルがあるもの」「〇〇さんの発言だけ」"
     )
 
     return embed
