@@ -69,14 +69,22 @@ async def check_sync_status():
 
             discord_channels = []
             not_synced = []
+            excluded_channels = []
 
             # テキストチャンネル
             for channel in guild.text_channels:
-                discord_channels.append({
-                    "id": str(channel.id),
-                    "name": channel.name,
-                    "type": "text",
-                })
+                # 除外チャンネルの判定
+                if channel.name in settings.exclude_channel_names:
+                    excluded_channels.append(channel.name)
+                    continue
+
+                discord_channels.append(
+                    {
+                        "id": str(channel.id),
+                        "name": channel.name,
+                        "type": "text",
+                    }
+                )
                 if str(channel.id) not in synced_ids:
                     not_synced.append(channel.name)
 
@@ -84,16 +92,24 @@ async def check_sync_status():
             forum_channels = getattr(guild, "forum_channels", [])
             for forum in forum_channels:
                 async for thread in forum.archived_threads():
-                    discord_channels.append({
-                        "id": str(thread.id),
-                        "name": f"{forum.name}/{thread.name}",
-                        "type": "forum_thread",
-                    })
+                    discord_channels.append(
+                        {
+                            "id": str(thread.id),
+                            "name": f"{forum.name}/{thread.name}",
+                            "type": "forum_thread",
+                        }
+                    )
                     if str(thread.id) not in synced_ids:
                         not_synced.append(f"{forum.name}/{thread.name}")
 
             print(f"[Discord] テキストチャンネル数: {len(guild.text_channels)}")
             print(f"[Discord] 総チャンネル/スレッド数: {len(discord_channels)}")
+
+            # 除外チャンネル表示
+            if excluded_channels:
+                print(f"\n--- 除外チャンネル ({len(excluded_channels)}件) ---")
+                for name in excluded_channels:
+                    print(f"  - {name}")
 
             if not_synced:
                 print(f"\n[警告] 未同期チャンネル ({len(not_synced)}件):")

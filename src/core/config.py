@@ -1,5 +1,6 @@
 """環境変数・設定管理"""
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -27,6 +28,19 @@ class Settings(BaseSettings):
 
     # Search settings
     search_result_limit: int = 5
+
+    # Exclude channels
+    exclude_channel_names: list[str] = ["検索用"]
+
+    @field_validator("exclude_channel_names", mode="before")
+    @classmethod
+    def parse_exclude_channel_names(cls, v: str | list[str]) -> list[str]:
+        """カンマ区切り文字列をリストに変換"""
+        if isinstance(v, str):
+            if not v.strip():
+                return []
+            return [name.strip() for name in v.split(",") if name.strip()]
+        return v
 
     class Config:
         env_file = ".env.local", ".env"

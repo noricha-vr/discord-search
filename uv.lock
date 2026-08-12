@@ -352,6 +352,12 @@ ocr = [
     { name = "yomitoku" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.9.0" },
@@ -367,6 +373,12 @@ requires-dist = [
     { name = "yomitoku", marker = "extra == 'ocr'", specifier = ">=0.10.0" },
 ]
 provides-extras = ["ocr", "dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9.0.2" },
+    { name = "ruff", specifier = ">=0.14.10" },
+]
 
 [[package]]
 name = "distro"

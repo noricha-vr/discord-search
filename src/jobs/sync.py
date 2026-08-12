@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from uuid import uuid4
 
 import discord
@@ -52,6 +52,11 @@ class MessageSyncer:
 
             # 全テキストチャンネルを同期
             for channel in guild.text_channels:
+                # 除外チャンネルをスキップ
+                if channel.name in settings.exclude_channel_names:
+                    logger.info(f"除外チャンネル: {channel.name}")
+                    continue
+
                 try:
                     channel_id = str(channel.id)
                     is_new_channel = channel_id not in synced_channel_ids
